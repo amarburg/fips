@@ -104,9 +104,19 @@ def gen(fips_dir, proj_dir, cfg_name) :
 
     # load the config(s)
     configs = config.load(fips_dir, proj_dir, cfg_name)
+    fips_yml_defines = dep.get_fips_yml_defines(proj_dir)
+
     num_valid_configs = 0
     if configs :
         for cfg in configs :
+
+            # Merge fips.yml defines into config defines
+            if fips_yml_defines:
+                if 'defines' in cfg and cfg['defines']:
+                    cfg['defines'].update(fips_yml_defines)
+                else:
+                    cfg['defines'] = fips_yml_defines
+
             # check if config is valid
             config_valid, _ = config.check_config_valid(fips_dir, proj_dir, cfg, print_errors = True)
             if config_valid :
@@ -142,9 +152,18 @@ def configure(fips_dir, proj_dir, cfg_name) :
 
     # load configs, if more then one, only use first one
     configs = config.load(fips_dir, proj_dir, cfg_name)
+    fips_yml_defines = dep.get_fips_yml_defines(proj_dir)
+
     if configs :
         cfg = configs[0]
         log.colored(log.YELLOW, '=== configuring: {}'.format(cfg['name']))
+
+        # Merge fips.yml defines into config defines
+        if fips_yml_defines:
+            if 'defines' in cfg and cfg['defines']:
+                cfg['defines'].update(fips_yml_defines)
+            else:
+                cfg['defines'] = fips_yml_defines
 
         # generate build files
         if not gen_project(fips_dir, proj_dir, cfg, True) :
@@ -225,10 +244,19 @@ def build(fips_dir, proj_dir, cfg_name, target=None) :
 
     # load the config(s)
     configs = config.load(fips_dir, proj_dir, cfg_name)
+    fips_yml_defines = dep.get_fips_yml_defines(proj_dir)
+
     num_valid_configs = 0
     if configs :
         for cfg in configs :
             # check if config is valid
+            # Merge fips.yml defines into config defines
+            if fips_yml_defines:
+                if 'defines' in cfg and cfg['defines']:
+                    cfg['defines'].update(fips_yml_defines)
+                else:
+                    cfg['defines'] = fips_yml_defines
+
             config_valid, _ = config.check_config_valid(fips_dir, proj_dir, cfg, print_errors=True)
             if config_valid :
                 log.colored(log.YELLOW, "=== building: {}".format(cfg['name']))

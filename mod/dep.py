@@ -96,6 +96,23 @@ def get_policy(proj_dir, policy) :
         return None
 
 #-------------------------------------------------------------------------------
+def get_fips_yml_defines(proj_dir) :
+    """loads FIPS defines from fips.yml file, or None if none are
+    specified.
+
+    :param proj_dir:    the project directory
+    :returns:           true/false
+    """
+
+    if util.is_valid_project_dir(proj_dir) :
+        dic = util.load_fips_yml(proj_dir)
+        if 'defines' in dic and type(dic['defines']) is dict:
+            return dic['defines']
+
+    return None
+
+
+#-------------------------------------------------------------------------------
 def _rec_get_all_imports_exports(fips_dir, proj_dir, result) :
     """recursively get all imported projects, their exported and
     imported modules in a dictionary object:

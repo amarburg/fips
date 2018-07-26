@@ -21,6 +21,7 @@ macro(fips_reset target)
     set(CurCompileFlags "")
     set(FipsAddFilesEnabled 1)
     set(CurTargetName ${target})
+    set(FIPS_OSX_PLIST_PATH)
 endmacro()
 
 #-------------------------------------------------------------------------------
@@ -60,7 +61,7 @@ macro(fips_resolve_dependencies target)
     foreach (lib_release ${CurLinkLibsRelease})
         target_link_libraries(${target} optimized ${lib_release})
     endforeach()
-    if (FIPS_IOS OR FIPS_OSX)
+    if (FIPS_OSX)
         foreach (fw ${CurFrameworks})
             unset(found_framework CACHE)
             find_library(found_framework ${fw})
@@ -91,7 +92,7 @@ endmacro(fips_config_postfixes_for_exe)
 #   Internal macro to set the output directory for exes and sharedlibs
 #
 function(fips_config_output_directory target)
-    if (NOT (FIPS_IOS OR FIPS_ANDROID))
+    if (NOT FIPS_ANDROID)
         set(dir ${FIPS_DEPLOY_DIR}/${FIPS_PROJECT_NAME}/${FIPS_CONFIG})
 
         # exes
@@ -142,6 +143,30 @@ function(fips_addto_headerdirs_list target)
     file(APPEND "${CMAKE_BINARY_DIR}/fips_headerdirs.yml" "${target}:\n")
     foreach(hdr ${hdrs})
         file(APPEND "${CMAKE_BINARY_DIR}/fips_headerdirs.yml" "    - \"${hdr}\"\n")
+    endforeach()
+endfunction()
+
+#-------------------------------------------------------------------------------
+#   fips_reset_defines_list
+#   Clears the fips_defines.yml file which keeps track of target definitions.
+#
+function(fips_reset_defines_list)
+    file(WRITE "${CMAKE_BINARY_DIR}/fips_defines.yml" "---\n")
+endfunction()
+
+
+#-------------------------------------------------------------------------------
+#   fips_addto_defines_list(target)
+#   Add target compile definitions to the fips_defines.yml file.
+#
+#   NOTE: currently this only adds the global-level defines, a proper
+#   implementation should add global- and target-level defines.
+#
+function(fips_addto_defines_list target)
+    get_property(defs DIRECTORY "." PROPERTY COMPILE_DEFINITIONS)
+    file(APPEND "${CMAKE_BINARY_DIR}/fips_defines.yml" "${target}:\n")
+    foreach(def ${defs})
+        file(APPEND "${CMAKE_BINARY_DIR}/fips_defines.yml" "    - '${def}'\n")
     endforeach()
 endfunction()
 
@@ -210,10 +235,14 @@ macro(fips_add_file new_file)
         # add to current source group
         source_group("${CurGroup}" FILES ${cur_file})
 
-        # mark .m as .c file for older cmake versions (bug is fixed in cmake 3.1+)
         if (FIPS_OSX)
+            # mark .m as .c file for older cmake versions (bug is fixed in cmake 3.1+)
             if (${f_ext} STREQUAL ".m")
                 set_source_files_properties(${cur_file} PROPERTIES LANGUAGE C)
+            endif()
+            # handle plist files special
+            if (${f_ext} STREQUAL ".plist")
+                set(FIPS_OSX_PLIST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${cur_file}")
             endif()
         endif()
 

@@ -15,12 +15,9 @@ get_filename_component(FIPS_BUILD_DIR "${FIPS_ROOT_DIR}/../fips-build" ABSOLUTE)
 include(CMakeParseArguments)
 
 include("${FIPS_ROOT_DIR}/cmake/fips_private.cmake")
-include("${FIPS_ROOT_DIR}/cmake/fips_unittests.cmake")
 include("${FIPS_ROOT_DIR}/cmake/fips_windows.cmake")
 include("${FIPS_ROOT_DIR}/cmake/fips_android.cmake")
 include("${FIPS_ROOT_DIR}/cmake/fips_osx.cmake")
-include("${FIPS_ROOT_DIR}/cmake/fips_pnacl.cmake")
-include("${FIPS_ROOT_DIR}/cmake/fips_uwp.cmake")
 include("${FIPS_ROOT_DIR}/cmake/fips_generators.cmake")
 
 #-------------------------------------------------------------------------------
@@ -28,9 +25,6 @@ include("${FIPS_ROOT_DIR}/cmake/fips_generators.cmake")
 #-------------------------------------------------------------------------------
 option(FIPS_CMAKE_VERBOSE "Verbose messages during cmake runs" OFF)
 option(FIPS_NO_ASSERTS_IN_RELEASE "Remove asserts in release-mode" OFF)
-option(FIPS_UNITTESTS "Enable unit tests" OFF)
-option(FIPS_UNITTESTS_RUN_AFTER_BUILD "Automatically run unit tests after building" OFF)
-option(FIPS_UNITTESTS_HEADLESS "If enabled don't run tests which require a display" OFF)
 option(FIPS_EXCEPTIONS "Enable C++ exceptions" OFF)
 option(FIPS_RTTI "Enable C++ RTTI" OFF)
 option(FIPS_ALLOCATOR_DEBUG "Enable allocator debugging code (slow)" OFF)
@@ -43,11 +37,6 @@ option(FIPS_AUTO_IMPORT "Automatically include all modules from imports" ON)
 option(FIPS_CLANG_ADDRESS_SANITIZER "Enable clang address sanitizer" OFF)
 option(FIPS_CLANG_SAVE_OPTIMIZATION_RECORD "Enable clang -fsave-optimization-record option" OFF)
 
-# turn some dependent options on/off
-if (FIPS_UNITTESTS)
-    enable_testing()
-    set(FIPS_EXCEPTIONS ON CACHE BOOL "Enable C++ exceptions" FORCE)
-endif()
 
 #-------------------------------------------------------------------------------
 #   fips_setup()
@@ -61,25 +50,34 @@ macro(fips_setup)
         set(CMAKE_CXX_STANDARD 11)
     endif()
 
-    # check for optional main-project name, this is the preferred way to
-    # define the project name, but we better be backward compatible
-    # it is still allowed to call fips_project() afterwards
     #
-    # if a project imports Apps or SharedLibs, fips_setup MUST contain a PROJECT arg
-    set(options)
-    set(oneValueArgs PROJECT)
-    set(multiValueArgs)
-    CMAKE_PARSE_ARGUMENTS(_fs "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-    if (_fs_UNPARSED_ARGUMENTS)
-        message(FATAL_ERROR "fips_setup(): called with invalid args '${_fg_UNPARSED_ARGUMENTS}'")
+    # cmake 3.15 has added a warning if the top-level cmake file doesn't contain
+    # a project() statement, so we'll expect that the project name is now
+    # set directly before fips_setup() is called, and only support the
+    # PROJECT args for backward compatibility
+    #
+    if (CMAKE_PROJECT_NAME STREQUAL "Project")
+        message(WARNING "please call project([proj_name]) directly before fips_setup(), cmake is expecting this starting with version 3.15")
+        #
+        # check for optional main-project name, this is the preferred way to
+        # define the project name, but we better be backward compatible
+        # it is still allowed to call fips_project() afterwards
+        #
+        # if a project imports Apps or SharedLibs, fips_setup MUST contain a PROJECT arg
+        set(options)
+        set(oneValueArgs PROJECT)
+        set(multiValueArgs)
+        CMAKE_PARSE_ARGUMENTS(_fs "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+        if (_fs_UNPARSED_ARGUMENTS)
+            message(FATAL_ERROR "fips_setup(): called with invalid args '${_fg_UNPARSED_ARGUMENTS}'")
+        endif()
+        if (_fs_PROJECT)
+            project(${_fs_PROJECT})
+            message("=== fips_setup(PROJECT ${_fs_PROJECT})")
+        else()
+            message("=== fips_setup()")
+        endif()
     endif()
-    if (_fs_PROJECT)
-        project(${_fs_PROJECT})
-        message("=== fips_setup(PROJECT ${_fs_PROJECT})")
-    else()
-        message("=== fips_setup()")
-    endif()
-
     message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
     if (FIPS_ROOT_DIR)
@@ -103,7 +101,7 @@ macro(fips_setup)
 
     # set FIPS_CONFIG to default if not provided by command line
     # (this provides better compatibility with some IDEs not directly
-    # supported by cmake, like QtCreator or CLion
+    # supported by cmake, like QtCreator
     if (NOT FIPS_CONFIG)
         message("FIPS_CONFIG not provided by command line, selecting default value")
         fips_choose_config()
@@ -144,7 +142,7 @@ macro(fips_setup)
         set(FIPS_MSVC 1)
         message("Detected C++ Compiler: VStudio (FIPS_MSVC)")
     else()
-        if (FIPS_EMSCRIPTEN OR FIPS_PNACL)
+        if (FIPS_EMSCRIPTEN)
             set(FIPS_CLANG 1)
             message("Detect C++ Compiler by platform: Clang (FIPS_CLANG)")
         elseif (FIPS_ANDROID)
@@ -282,7 +280,7 @@ macro(fips_end_module)
     # handle generators (post-target)
     fips_handle_generators(${CurTargetName})
 
-    # track some target propeties in YAML files
+    # track some target properties in YAML files
     fips_addto_targets_list(${CurTargetName} "module")
     fips_addto_headerdirs_list(${CurTargetName})
     fips_addto_defines_list(${CurTargetName})
@@ -312,14 +310,14 @@ macro(fips_end_lib)
 
     # set platform- and target-specific compiler options
     fips_vs_apply_options(${CurTargetName})
-    
+
     # add dependencies
     fips_resolve_dependencies(${CurTargetName})
 
     # handle generators (post-target)
     fips_handle_generators(${CurTargetName})
 
-    # track some target propeties in YAML files
+    # track some target properties in YAML files
     fips_addto_targets_list(${CurTargetName} "lib")
     fips_addto_headerdirs_list(${CurTargetName})
     fips_addto_defines_list(${CurTargetName})
@@ -363,11 +361,7 @@ macro(fips_end_app)
         if (FIPS_OSX)
             add_executable(${CurTargetName} MACOSX_BUNDLE ${CurSources})
             fips_osx_add_target_properties(${CurTargetName})
-            fips_copy_osx_dylib_files(${CurTargetName} 1)
         elseif (FIPS_WIN32 OR FIPS_WIN64)
-            if (FIPS_UWP)
-                fips_uwp_add_target_properties(${CurTargetName})
-            endif()
             add_executable(${CurTargetName} WIN32 ${CurSources})
         elseif (FIPS_ANDROID)
             add_library(${CurTargetName} SHARED ${CurSources})
@@ -380,9 +374,6 @@ macro(fips_end_app)
             add_library(${CurTargetName} SHARED ${CurSources})
         else()
             add_executable(${CurTargetName} ${CurSources})
-        endif()
-        if (FIPS_OSX)
-            fips_copy_osx_dylib_files(${CurTargetName} 0)
         endif()
     endif()
     fips_apply_target_group(${CurTargetName})
@@ -404,17 +395,11 @@ macro(fips_end_app)
     # add dependencies
     fips_resolve_dependencies(${CurTargetName})
 
-    # PNaCl specific stuff
-    if (FIPS_PNACL)
-        fips_pnacl_create_wrapper(${CurTargetName})
-        fips_pnacl_post_buildsteps(${CurTargetName})
-    endif()
-
     # setup executable output directory and postfixes (_debug, etc...)
     fips_config_output_directory(${CurTargetName})
     fips_config_postfixes_for_exe(${CurTargetName})
 
-    # track some target propeties in YAML files
+    # track some target properties in YAML files
     fips_addto_targets_list(${CurTargetName} "app")
     fips_addto_headerdirs_list(${CurTargetName})
     fips_addto_defines_list(${CurTargetName})
@@ -462,7 +447,7 @@ macro(fips_end_sharedlib)
     # setup executable output directory and postfixes (_debug, etc...)
     fips_config_output_directory(${CurTargetName})
 
-    # track some target propeties in YAML files
+    # track some target properties in YAML files
     fips_addto_targets_list(${CurTargetName} "sharedlib")
     fips_addto_headerdirs_list(${CurTargetName})
     fips_addto_defines_list(${CurTargetName})
@@ -542,7 +527,7 @@ macro(fips_dir dir)
 
     # assign CurGroup global var
     if (_fd_GROUP)
-        # group is explicitely given as GROUP argument
+        # group is explicitly given as GROUP argument
         set(CurGroup ${_fd_GROUP})
         # special case 'no group' as GROUP "."
         if (${CurGroup} STREQUAL ".")
@@ -720,7 +705,7 @@ macro(fips_generate)
         fips_add_target_dependency(${_fg_REQUIRES})
     endif()
     fips_add_file("${_fg_FROM}")
-    fips_add_generator(${CurTargetName} "${_fg_TYPE}" ${_fg_OUT_OF_SOURCE} "${_fg_FROM}" "${_fg_SOURCE}" "${_fg_HEADER}" "${_fg_ARGS}") 
+    fips_add_generator(${CurTargetName} "${_fg_TYPE}" ${_fg_OUT_OF_SOURCE} "${_fg_FROM}" "${_fg_SOURCE}" "${_fg_HEADER}" "${_fg_ARGS}")
 endmacro()
 
 #-------------------------------------------------------------------------------

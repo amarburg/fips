@@ -19,9 +19,6 @@ endif()
 # FIXME: define standard frame works that are always linked
 set(FIPS_OSX_STANDARD_FRAMEWORKS Foundation IOKit)
 
-# globally silence the GL depreciation warning
-add_definitions(-DGL_SILENCE_DEPRECATION)
-
 # compiler flags
 set(CMAKE_CXX_FLAGS "-std=c++11 -fstrict-aliasing -Wno-expansion-to-defined -Wno-multichar -Wall -Wextra -Wno-unused-parameter -Wno-unknown-pragmas -Wno-ignored-qualifiers -Wno-long-long -Wno-overloaded-virtual -Wno-unused-volatile-lvalue -Wno-deprecated-writable-strings")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -msse3 -DNDEBUG")
@@ -38,6 +35,17 @@ set(CMAKE_EXE_LINKER_FLAGS_RELEASE "")
 # need to set some flags directly as Xcode attributes
 set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++11")
 set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
+
+# stack-checking? enabling this leads may generate binaries
+# that are not backward compatible to older macOS versions
+option(FIPS_OSX_USE_STACK_CHECKING "Enable/disable stack checking" OFF)
+if (FIPS_OSX_USE_STACK_CHECKING)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-check")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-check")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-stack-check")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-stack-check")
+endif()
 
 # ARC on/off?
 option(FIPS_OSX_USE_ARC "Enable/disable Automatic Reference Counting" OFF)

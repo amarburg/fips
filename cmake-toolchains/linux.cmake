@@ -10,7 +10,7 @@ include(CheckLibraryExists)
 option(FIPS_RASPBERRYPI "Set to true if compiling for the Raspberry Pi" OFF)
 
 set(FIPS_PLATFORM Linux)
-if (FIPS_RASPBERRYPI) 
+if (FIPS_RASPBERRYPI)
     set(FIPS_PLATFORM_NAME "linuxraspbian")
 else()
     set(FIPS_PLATFORM_NAME "linux")
@@ -22,13 +22,13 @@ set(FIPS_POSIX 1)
 set(CMAKE_CONFIGURATION_TYPES Debug Release)
 
 # C++ flags
-set(CMAKE_CXX_FLAGS "-fPIC -std=c++11 -pthread -fno-strict-aliasing -Wno-expansion-to-defined -Wno-multichar -Wall -Wextra -Wno-unused-parameter -Wno-unknown-pragmas -Wno-ignored-qualifiers")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ftree-vectorize -ffast-math -DNDEBUG")
+set(CMAKE_CXX_FLAGS "-fPIC -std=c++11 -pthread -fno-strict-aliasing -Wno-multichar -Wall -Wextra -Wno-unused-parameter -Wno-unknown-pragmas -Wno-ignored-qualifiers -Wno-missing-field-initializers")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -D_DEBUG_ -D_DEBUG -DFIPS_DEBUG=1 -ggdb")
 
 # C flags
-set(CMAKE_C_FLAGS "-fPIC -pthread -fno-strict-aliasing -Wno-multichar -Wall -Wextra -Wno-expansion-to-defined -Wno-unused-parameter -Wno-unknown-pragmas -Wno-ignored-qualifiers")
-set(CMAKE_C_FLAGS_RELEASE "-O3 -ftree-vectorize -ffast-math -DNDEBUG")
+set(CMAKE_C_FLAGS "-fPIC -pthread -fno-strict-aliasing -Wno-multichar -Wall -Wextra -Wno-unused-parameter -Wno-unknown-pragmas -Wno-ignored-qualifiers -Wno-missing-field-initializers")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_C_FLAGS_DEBUG "-O0 -D_DEBUG_ -D_DEBUG -DFIPS_DEBUG=1 -ggdb")
 
 # exe linker flags
@@ -48,9 +48,9 @@ endif()
 
 # 32-bit build on/off?
 if (FIPS_LINUX_MACH32)
-    set(CMAKE_CXX_FLASG "${CMAKE_CXX_FLAGS} -m32")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS -m32")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32")
 endif()
 
 if (FIPS_GCC)

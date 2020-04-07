@@ -1,6 +1,8 @@
 #-------------------------------------------------------------------------------
 #	ios.toolchain.cmake
 #	Fips cmake toolchain file for cross-compiling to iOS from OSX.
+#
+#   NOTE that iOS support requires at least cmake 3.14!
 #-------------------------------------------------------------------------------
 
 set(FIPS_PLATFORM IOS)
@@ -9,17 +11,9 @@ set(FIPS_IOS 1)
 set(FIPS_OSX 1)
 set(FIPS_POSIX 1)
 
-# NOTE I'm not sure if those 2 are necessary, it worked for me
-# without, but not for others
-# See:
-# - https://github.com/floooh/fips/pull/112
-# - https://cmake.org/Bug/view.php?id=15329
-set(CMAKE_MACOSX_BUNDLE YES)
-set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO")
-
-set(CMAKE_SYSTEM_NAME Darwin)
-set(CMAKE_OSX_ARCHITECTURES "armv7 arm64")
+set(CMAKE_SYSTEM_NAME iOS)
 set(CMAKE_OSX_SYSROOT "iphoneos")
+set(CMAKE_OSX_ARCHITECTURES "armv7;arm64;x86_64")
 set(CMAKE_XCODE_EFFECTIVE_PLATFORMS "-iphoneos;-iphonesimulator")
 
 # define configurations
@@ -28,7 +22,7 @@ set(CMAKE_CONFIGURATION_TYPES Debug Release)
 # define standard frame works that are always linked
 set(FIPS_OSX_STANDARD_FRAMEWORKS Foundation UIKit)
 
-# globally silence the GLES depreciation warning
+# globally silence the GLES deprecation warning
 add_definitions(-DGLES_SILENCE_DEPRECATION)
 
 # ARC on/off?

@@ -46,6 +46,8 @@ def get_imports(fips_dir, proj_dir) :
                         imports[dep]['cond'] = None
                     if not 'git' in imports[dep] :
                         log.error("no git URL in import '{}' in '{}/fips.yml'!\n".format(dep, proj_dir))
+                    if not 'group' in imports[dep] :
+                        imports[dep]['group'] = None
             else :
                 log.error("imports in '{}/fips.yml' must be a dictionary!".format(proj_dir))
     return imports
@@ -64,6 +66,8 @@ def get_exports(proj_dir) :
             exports = dic['exports']
     if not 'header-dirs' in exports :
         exports['header-dirs'] = []
+    if not 'conditional-header-dirs' in exports :
+        exports['conditional-header-dirs'] = []
     if not 'lib-dirs' in exports :
         exports['lib-dirs'] = []
     if not 'defines' in exports :
@@ -123,6 +127,8 @@ def _rec_get_all_imports_exports(fips_dir, proj_dir, result) :
             url:    git-url (not valid for first, top-level project)
             exports:
                 header-dirs: [ ]
+                conditional-header-dirs:
+                    dir: cmake-if condition string
                 lib-dirs: [ ]
                 defines: 
                     def-key: def-val
@@ -275,9 +281,11 @@ def gather_imports(fips_dir, proj_dir) :
                 imported[imp_proj_name] = {}
                 imported[imp_proj_name]['modules'] = OrderedDict()
                 imported[imp_proj_name]['hdrdirs'] = []
+                imported[imp_proj_name]['condhdrdirs'] = {}
                 imported[imp_proj_name]['libdirs'] = []
                 imported[imp_proj_name]['defines'] = {}
                 imported[imp_proj_name]['cond'] = imports[imp_proj_name]['cond']
+                imported[imp_proj_name]['group'] = imports[imp_proj_name]['group']
 
                 # add header search paths
                 for imp_hdr in deps[imp_proj_name]['exports']['header-dirs'] :
@@ -286,6 +294,20 @@ def gather_imports(fips_dir, proj_dir) :
                     if not os.path.isdir(hdr_path) :
                         log.warn("header search path '{}' not found in project '{}'".format(hdr_path, imp_proj_name))
                     imported[imp_proj_name]['hdrdirs'].append(hdr_path)
+
+                # add conditional header search paths
+                for imp_hdr in deps[imp_proj_name]['exports']['conditional-header-dirs'] :
+                    if not 'path' in imp_hdr :
+                        log.warn("no 'path' key in conditional-header-dirs in project {}".format(imp_proj_name))
+                    elif not 'cond' in imp_hdr :
+                        log.warn("no 'cond' key in conditional-header-dirs in project {}".format(imp_proj_name))
+                    else :
+                        hdr_path = '{}/{}/{}'.format(ws_dir, imp_proj_name, imp_hdr['path'])
+                        hdr_path = os.path.normpath(hdr_path).replace('\\', '/')
+                        if not os.path.isdir(hdr_path) :
+                            log.warn("conditional header search path '{}' not found in project '{}'".format(hdr_path, imp_proj_name))
+                        value = imp_hdr['cond']
+                        imported[imp_proj_name]['condhdrdirs'][hdr_path] = value
 
                 # add lib search paths
                 for imp_lib in deps[imp_proj_name]['exports']['lib-dirs'] :
@@ -335,8 +357,9 @@ def write_imports(fips_dir, proj_dir, cfg_name, imported) :
     :params imported:   the imports dictionary created with 'gather_imports'
     """
 
-    if imported :
+    if imported is not None:
         unique_hdrdirs = []
+        unique_condhdrdirs = {}
         unique_libdirs = []
         unique_defines = {}
         unique_modules = {}
@@ -373,6 +396,15 @@ def write_imports(fips_dir, proj_dir, cfg_name, imported) :
                         f.write('include_directories("{}")\n'.format(hdrdir))
                         unique_hdrdirs.append(hdrdir)
 
+                # add conditional header search paths
+                for hdrdir in imported[imp_proj_name]['condhdrdirs'] :
+                    value = imported[imp_proj_name]['condhdrdirs'][hdrdir]
+                    if hdrdir not in unique_condhdrdirs :
+                        unique_condhdrdirs[hdrdir] = value
+                        f.write('if ({})\n'.format(value))
+                        f.write('    include_directories("{}")\n'.format(hdrdir))
+                        f.write('endif()\n')
+
                 # add lib search paths
                 for libdir in imported[imp_proj_name]['libdirs'] :
                     if libdir not in unique_libdirs :
@@ -408,7 +440,12 @@ def write_imports(fips_dir, proj_dir, cfg_name, imported) :
 
                     # if auto-import is enabled, also actually import all modules
                     f.write('if (FIPS_AUTO_IMPORT)\n')
-                    f.write('    fips_ide_group("Imports")\n')
+                    group = "Imports"
+                    if imported[imp_proj_name]['group'] :
+                        group += "/" + imported[imp_proj_name]['group']                        
+                    if len(imported[imp_proj_name]['modules']) > 3 :
+                        group += "/" + imp_proj_name
+                    f.write('    fips_ide_group("{}")\n'.format(group))
                     for import_func in import_functions :
                         f.write('    {}()\n'.format(import_func))
                     f.write('    fips_ide_group("")\n')
@@ -532,19 +569,21 @@ def _rec_update_imports(fips_dir, proj_dir, handled) :
                 log.colored(log.YELLOW, "=== dependency: '{}':".format(dep_proj_name))
                 dep_ok = False
                 if os.path.isdir(dep_proj_dir) :
-                    # directory did not exist, do a fresh git clone
-                    dep = imports[dep_proj_name]
-                    git_commit = None if 'rev' not in dep else dep['rev']
-                    if git.has_local_changes(dep_proj_dir) :
-                        log.warn("  '{}' has local changes, skipping...".format(dep_proj_dir))
+                    if os.path.isdir("{}/.git".format(dep_proj_dir)) :
+                        dep = imports[dep_proj_name]
+                        git_commit = None if 'rev' not in dep else dep['rev']
+                        if git.has_local_changes(dep_proj_dir) :
+                            log.warn("  '{}' has local changes, skipping...".format(dep_proj_dir))
+                        else :
+                            log.colored(log.BLUE, "  updating '{}'...".format(dep_proj_dir))
+                            git.update(dep_proj_dir)
+                            if git_commit:
+                                log.colored(log.YELLOW, "=== revision: '{}':".format(git_commit))
+                                dep_ok = git.checkout(dep_proj_dir, git_commit)
+                            else:
+                                dep_ok = True
                     else :
-                        log.colored(log.BLUE, "  updating '{}'...".format(dep_proj_dir))
-                        git.update(dep_proj_dir)
-                        if git_commit:
-                            log.colored(log.YELLOW, "=== revision: '{}':".format(git_commit))
-                            dep_ok = git.checkout(dep_proj_dir, git_commit)
-                        else:
-                            dep_ok = True
+                        log.colored(log.BLUE, "  '{}' is not a git repository".format(dep_proj_dir))
                 else :
                     log.warn("  '{}' does not exist, please run 'fips fetch'".format(dep_proj_dir))
                 # recuse
